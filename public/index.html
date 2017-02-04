@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>火星聊天室</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/jquery-3.1.0.min.js"></script>
+    <script src="socket.io/socket.io.js"></script>
+    <script>
+        $(function(){
+            var clientSocket=io();
+            var content={};
+            //接收数据
+            clientSocket.on('hello',function(data){
+            });
+            clientSocket.on('people',function(data){
+                $('#people span').html(data);
+            });
+            clientSocket.on('userListing',function(data){
+                $('#userListing').html(data.html);
+            });
+            clientSocket.on('userListingLeave',function(data){
+                for(var i=0;i<$('#userListing li').length;i++) {
+                    var obj = $('#userListing li').eq(i).find('.name').html();
+
+                    if (obj == data.nickname) {
+
+                        $('#userListing li').eq(i).remove();
+                    }
+                }
+
+                clientSocket.emit('userListingLeave',$('#userListing').html());
+            });
+
+
+            //接收数据
+            var isLogin=false;
+            var isMessage=false;
+            var html='';
+            clientSocket.on('message',function(data){
+                var type=data.type;
+                switch(type){
+                    case '100':
+                        isLogin=true;
+                        showChatPanel(data);
+                        break;
+                    case '101':
+                        if(isLogin){showWelcomeMsg(data);}
+                        break;
+                    case '102':
+                        showUserleave(data);
+                        break;
+                    case '200':
+                        showSelfChat(data);
+                        break;
+                    case '201':
+                        showChat(data);
+                        break;
+                }
+            });
+
+            function showChatPanel(data){//显示聊天面板
+
+                $('#welcome').hide();
+                $('#chatroom').show();
+                var welcome='<div>[系统信息]您以进入聊天室,请遵守纪律</div>';
+                $('#messages').append(welcome);
+                $('#userListing').attr('self',data.nickname);
+
+            }
+
+
+            function showWelcomeMsg(data){//显示欢迎信息
+                var welcome1='<div class="loginMsg">[系统信息]欢迎'+data.nickname+'进入聊天室</div>';
+                $('#messages').append(welcome1);
+
+                scroll();
+            }
+
+            function showSelfChat(data){//显示自己信息
+                var welcome1='<div class="loginMsg">[我]:'+data.content+'</div>';
+                $('#messages').append(welcome1);
+                for(var i=0;i<$('#userListing li').length;i++) {
+                    var obj = $('#userListing li').eq(i).find('.pic');
+                    if (obj.attr('alt') == data.Private) {
+                        if(obj.attr('title')=='离开') {
+                            var welcome1='<div class="loginMsg">[系统信息]:对方以离开,无法及时回复您的消息!</div>';
+                            $('#messages').append(welcome1);
+                        }
+
+                    }
+                }
+
+
+                scroll();
+            }
+
+
+            function showChat(data){//显示信息
+
+                if(data.Private){
+                        if( $('#userListing').attr('self')==data.Private){
+
+                            var welcome1='<div class="loginMsg">['+data.nickname+'悄悄对你说]:'+data.content+'</div>';
+
+
+                        }
+
+                }
+                else{
+                    var welcome1='<div class="loginMsg">['+data.nickname+']:'+data.content+'</div>';
+
+                }
+                $('#messages').append(welcome1);
+                scroll();
+
+            }
+
+            function showUserleave(data){
+                var welcome1='<div class="loginMsg">[系统消息]:'+data.nickname+'离开聊天室!</div>';
+                $('#messages').append(welcome1);
+
+            }
+
+
+
+            //==========================================================================================================
+
+
+
+            //滚动事件
+            function scroll(){
+                $('#messages').scrollTop($('#messages').prop('scrollHeight'));
+            }
+            //键盘事件
+
+            $('#message').on('keyup',function(e){
+                if(e.keyCode=='13'){$('#send').click();}
+            });
+
+
+            //
+
+
+            //用户昵称的非空验证和合法验证；==============================================================================
+            $('#startchat').on('click',function(){
+
+                var nickname= $.trim($('#nickname').val());//trim 去空格
+                var sex=$('input:radio[name="sex"]:checked').val();
+
+                if(nickname==''){
+                    alert('姓名不能为空!');
+                    $('#nickname').val('');
+                    return;
+                }else{
+                    $.getJSON('json/sensitive.json',function(data1){
+
+//                        var re = new RegExp(nickname,"g"); // 创建正则表达式对象。
+//                        var r = data.senword.match(re);
+
+                        if(nickname==data1.senword){
+                            alert(nickname+'是非法字符');
+                            return;
+                        }
+
+
+                            content={
+                            type:'101',
+                            nickname:nickname,
+                            sex:sex
+                        };
+
+                        var html ='<li>'+
+                                '<img class="pic" src="images/header-1.jpg" title="在线" alt="'+content.nickname+'">'+
+                                '<div class="name">'+content.nickname+'</div>'+
+                                '<img class="sex" src="'+content.sex+'">'+
+                                '</li>';
+
+
+
+                        clientSocket.send(content);
+                        clientSocket.emit('userListing',html);
+
+                    });
+
+                }
+
+
+
+
+            });
+            //私聊
+            $('#userListing').on('click','.pic',function(){
+                if($(this).attr('alt')==content.nickname){
+                    if($(this).attr('title')=='在线'){
+                        $(this).attr('title','离开');
+                        clientSocket.emit('userListingLeave',$('#userListing').html());
+                    }else{
+                        $(this).attr('title','在线');
+                        clientSocket.emit('userListingLeave',$('#userListing').html());
+                    }
+                }
+                else{
+
+                    if($('#userListing').attr('private')==$(this).attr('alt')){
+                        alert('关闭和'+$(this).attr('alt')+'的私聊');
+                        $('#userListing').attr('private','');
+                    }else{
+                        $('#userListing').attr('private',$(this).attr('alt'));
+                        alert('开启和'+$(this).attr('alt')+'的私聊');
+
+                    }
+
+                }
+
+            });
+
+
+
+            $('#send').on('click',function(){
+                var content= $.trim($('#message').val());//trim 去空格
+                    data={
+                    type:'201',
+                    content:content,
+                    Private:$('#userListing').attr('private'),
+                };
+                    clientSocket.send(data);
+
+
+            });
+
+
+
+        });
+    </script>
+</head>
+<body>
+<header id="banner">
+    <h1>Nice聊天室</h1>
+</header>
+
+<section id="welcome" >
+    	<img src="images/header-1.jpg" >
+        <span>
+            <input id="nickname" type="text" placeholder="请输入您的昵称" maxlength="7">
+            <label><img src="images/sex_02.png"><input type="radio" name="sex" value="images/sex_02.png" checked></label>
+            <label><img src="images/sex_01.png"><input type="radio" name="sex" value="images/sex_01.png"></label>
+  
+            <a id="startchat" class="btn">登录</a>
+        </span>
+</section>
+
+<section id="chatroom" class="hide">
+	<div class="left">
+    	<div id="people">在线人数：<span>0</span> / 6</div>
+    	<ul  id="userListing">
+
+    	</ul>
+        <div class="left-adv"></div>
+    </div>
+    <div id="messages">
+
+    </div>
+    <form>
+    	<input type="text" id="message" placeholder="在这里输入您的聊天内容">
+    	<input type="button" id="send" value="发送">
+    </form>
+</section>
+</body>
+</html>
